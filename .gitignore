@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local data / databases
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Test / coverage
+coverage/
