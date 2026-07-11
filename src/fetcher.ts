@@ -1,4 +1,4 @@
-import type { ExtractedPrice } from "./types.js";
+import type { AiExtractor, ExtractedPrice } from "./types.js";
 
 /**
  * Extract a price from raw HTML using a few common conventions, in order:
@@ -46,11 +46,27 @@ export function extractPrice(html: string): ExtractedPrice | null {
   return null;
 }
 
-/** Fetch a URL and extract its current price. Requires network access. */
+export interface FetchPriceOptions {
+  fetchImpl?: typeof fetch;
+  /**
+   * Optional AI extractor used as a fallback when the fast heuristic fails.
+   * Injected so a model can be wired in without a hard dependency or network
+   * calls in the default build. See {@link AiExtractor}.
+   */
+  ai?: AiExtractor;
+}
+
+/**
+ * Fetch a URL and extract its current price. Requires network access.
+ *
+ * Extraction runs the dependency-free heuristic first; if that finds nothing
+ * and an `ai` extractor was provided, it falls back to the model.
+ */
 export async function fetchPrice(
   url: string,
-  fetchImpl: typeof fetch = fetch,
+  options: FetchPriceOptions = {},
 ): Promise<ExtractedPrice | null> {
+  const fetchImpl = options.fetchImpl ?? fetch;
   const res = await fetchImpl(url, {
     headers: { "user-agent": "price-tracker/0.1 (+https://github.com)" },
   });
@@ -58,7 +74,14 @@ export async function fetchPrice(
     throw new Error(`Request to ${url} failed: ${res.status} ${res.statusText}`);
   }
   const html = await res.text();
-  return extractPrice(html);
+
+  const heuristic = extractPrice(html);
+  if (heuristic) return heuristic;
+
+  if (options.ai) {
+    return options.ai(html, { url });
+  }
+  return null;
 }
 
 function matchMetaContent(html: string, property: string): string | undefined {

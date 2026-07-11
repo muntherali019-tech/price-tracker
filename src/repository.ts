@@ -7,6 +7,7 @@ interface ProductRow {
   url: string;
   selector: string | null;
   currency: string | null;
+  target_price: number | null;
   created_at: string;
 }
 
@@ -25,6 +26,7 @@ function toProduct(row: ProductRow): Product {
     url: row.url,
     selector: row.selector,
     currency: row.currency,
+    targetPrice: row.target_price,
     createdAt: row.created_at,
   };
 }
@@ -45,14 +47,15 @@ export class Repository {
 
   addProduct(input: NewProduct): Product {
     const stmt = this.db.prepare(
-      `INSERT INTO products (name, url, selector, currency)
-       VALUES (@name, @url, @selector, @currency)`,
+      `INSERT INTO products (name, url, selector, currency, target_price)
+       VALUES (@name, @url, @selector, @currency, @targetPrice)`,
     );
     const info = stmt.run({
       name: input.name,
       url: input.url,
       selector: input.selector ?? null,
       currency: input.currency ?? null,
+      targetPrice: input.targetPrice ?? null,
     });
     const created = this.getProduct(Number(info.lastInsertRowid));
     if (!created) {
@@ -87,27 +90,54 @@ export class Repository {
     return info.changes > 0;
   }
 
+  setTargetPrice(id: number, target: number | null): boolean {
+    const info = this.db
+      .prepare(`UPDATE products SET target_price = ? WHERE id = ?`)
+      .run(target, id);
+    return info.changes > 0;
+  }
+
   recordPrice(
     productId: number,
     price: number,
     currency: string | null,
+    recordedAt?: string,
   ): PricePoint {
-    const stmt = this.db.prepare(
-      `INSERT INTO price_history (product_id, price, currency)
-       VALUES (?, ?, ?)`,
-    );
-    const info = stmt.run(productId, price, currency);
+    const info = recordedAt
+      ? this.db
+          .prepare(
+            `INSERT INTO price_history (product_id, price, currency, recorded_at)
+             VALUES (?, ?, ?, ?)`,
+          )
+          .run(productId, price, currency, recordedAt)
+      : this.db
+          .prepare(
+            `INSERT INTO price_history (product_id, price, currency)
+             VALUES (?, ?, ?)`,
+          )
+          .run(productId, price, currency);
     const row = this.db
       .prepare(`SELECT * FROM price_history WHERE id = ?`)
       .get(Number(info.lastInsertRowid)) as PriceRow;
     return toPricePoint(row);
   }
 
+  /** History for a product, newest first. Pass `limit` to cap the rows. */
   getHistory(productId: number, limit?: number): PricePoint[] {
     const sql =
       `SELECT * FROM price_history WHERE product_id = ? ORDER BY recorded_at DESC, id DESC` +
       (limit ? ` LIMIT ${Number(limit)}` : "");
     const rows = this.db.prepare(sql).all(productId) as PriceRow[];
+    return rows.map(toPricePoint);
+  }
+
+  /** History for a product in chronological (oldest-first) order. */
+  getHistoryAsc(productId: number): PricePoint[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM price_history WHERE product_id = ? ORDER BY recorded_at ASC, id ASC`,
+      )
+      .all(productId) as PriceRow[];
     return rows.map(toPricePoint);
   }
 

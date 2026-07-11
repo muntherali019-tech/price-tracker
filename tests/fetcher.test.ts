@@ -48,15 +48,43 @@ describe("fetchPrice", () => {
       new Response(`<meta property="og:price:amount" content="12.00">`, {
         status: 200,
       })) as unknown as typeof fetch;
-    const result = await fetchPrice("https://example.com/item", fakeFetch);
+    const result = await fetchPrice("https://example.com/item", {
+      fetchImpl: fakeFetch,
+    });
     expect(result?.price).toBe(12);
   });
 
   it("throws on a non-OK response", async () => {
     const fakeFetch = (async () =>
       new Response("nope", { status: 404, statusText: "Not Found" })) as unknown as typeof fetch;
-    await expect(fetchPrice("https://example.com/x", fakeFetch)).rejects.toThrow(
-      /404/,
-    );
+    await expect(
+      fetchPrice("https://example.com/x", { fetchImpl: fakeFetch }),
+    ).rejects.toThrow(/404/);
+  });
+
+  it("falls back to the injected AI extractor when the heuristic finds nothing", async () => {
+    const fakeFetch = (async () =>
+      new Response("<p>no machine-readable price here</p>", {
+        status: 200,
+      })) as unknown as typeof fetch;
+    const ai = async () => ({ price: 77.5, currency: "USD" });
+    const result = await fetchPrice("https://example.com/x", {
+      fetchImpl: fakeFetch,
+      ai,
+    });
+    expect(result).toEqual({ price: 77.5, currency: "USD" });
+  });
+
+  it("prefers the heuristic over the AI extractor when both could match", async () => {
+    const fakeFetch = (async () =>
+      new Response(`<meta property="og:price:amount" content="5.00">`, {
+        status: 200,
+      })) as unknown as typeof fetch;
+    const ai = async () => ({ price: 999, currency: "USD" });
+    const result = await fetchPrice("https://example.com/x", {
+      fetchImpl: fakeFetch,
+      ai,
+    });
+    expect(result?.price).toBe(5);
   });
 });
