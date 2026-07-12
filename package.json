@@ -34,6 +34,9 @@
   "dependencies": {
     "better-sqlite3": "^11.8.1"
   },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.68.0"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.7",

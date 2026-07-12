@@ -6,6 +6,7 @@ import { openDatabase } from "./db.js";
 import { Repository } from "./repository.js";
 import { Tracker } from "./tracker.js";
 import { seedDemo } from "./demo.js";
+import { aiExtractorFromEnv } from "./ai.js";
 import { affiliateConfigFromEnv, buildAffiliateUrl } from "./affiliate.js";
 import { toCsv, toJson, toMarkdownDigest, type ExportFormat } from "./export.js";
 import { c, money, setColor, sparkline, Spinner, table } from "./ui.js";
@@ -39,6 +40,9 @@ ${c.bold("Environment")}
   PRICE_TRACKER_DB                 SQLite path (default ~/.price-tracker/data.db)
   PRICE_TRACKER_AFFILIATE_TAG      Affiliate/partner id for \`share\`
   PRICE_TRACKER_AFFILIATE_TEMPLATE Optional URL template: {url} {tag} {domain}
+  PRICE_TRACKER_AI                 Set to 1 to enable Claude fallback extraction
+  PRICE_TRACKER_AI_MODEL           Model id (default claude-opus-4-8)
+  ANTHROPIC_API_KEY                API key used when PRICE_TRACKER_AI is on
 `;
 
 interface ParsedArgs {
@@ -90,7 +94,10 @@ async function main(): Promise<number> {
 
   const db = openDatabase(DEFAULT_DB);
   const repo = new Repository(db);
-  const tracker = new Tracker(repo);
+  // AI extraction is off unless PRICE_TRACKER_AI is set; when on, it is used
+  // only as a fallback for pages the heuristic can't parse. The SDK is imported
+  // lazily on first use, so enabling it costs nothing until then.
+  const tracker = new Tracker(repo, { ai: aiExtractorFromEnv() });
 
   try {
     switch (command) {

@@ -22,6 +22,7 @@ price-tracker/
 │   ├── repository.ts   # Repository: SQLite data access (products, history)
 │   ├── db.ts           # openDatabase(): connection + schema migration
 │   ├── fetcher.ts      # fetchPrice()/extractPrice(): extraction + AI fallback
+│   ├── ai.ts           # createClaudeExtractor(): opt-in Claude fallback (lazy SDK)
 │   ├── analytics.ts    # priceStats()/rankDeals(): pure stats over history
 │   ├── affiliate.ts    # buildAffiliateUrl(): affiliate link generation
 │   ├── export.ts       # toJson/toCsv/toMarkdownDigest(): data + deal exports
@@ -32,6 +33,7 @@ price-tracker/
 │   ├── tracker.test.ts   # Repository + Tracker behavior (in-memory DB)
 │   ├── fetcher.test.ts   # price parsing/extraction, fetch + AI fallback
 │   ├── analytics.test.ts # priceStats / rankDeals pure logic
+│   ├── ai.test.ts        # Claude extractor: html cleaning, JSON parsing, gating
 │   └── tools.test.ts     # affiliate, exporters, ui helpers, demo seeding
 ├── dist/               # build output (gitignored)
 ├── package.json
@@ -70,14 +72,33 @@ The code is layered, each layer depending only on the one below it:
 - **`cli.ts`** is a thin argument parser + dispatcher. It should contain no
   business logic — delegate to `Tracker` and the leaf utilities.
 
-### AI price extraction (injectable, no hard dependency)
+### AI price extraction (real Claude extractor, opt-in, no hard dependency)
 
 `AiExtractor` (in `types.ts`) is a `(html, ctx) => Promise<ExtractedPrice | null>`
-hook. It is **off by default** — the shipped build adds no model SDK and makes
-no external calls. To wire a model in, construct `new Tracker(repo, { ai })`
-with a function that calls your provider. Keep the heuristic as the fast path;
-the AI is a fallback only. Never hit a real model (or network) in tests — pass a
-fake `ai` just like `fetchImpl`.
+hook. It is **off by default** and runs **only as a fallback** when the heuristic
+finds nothing. `ai.ts` ships a real implementation:
+
+- **`createClaudeExtractor(options)`** returns an `AiExtractor` backed by Claude
+  via the official `@anthropic-ai/sdk`. It cleans the HTML (strips
+  scripts/styles/comments, collapses whitespace, truncates to a token budget),
+  prompts for strict JSON (`{"price", "currency"}`), and parses tolerantly
+  (`parseModelJson` handles code fences / stray prose). Default model
+  `claude-opus-4-8`; effort `low`.
+- **`aiExtractorFromEnv()`** returns the extractor when `PRICE_TRACKER_AI` is
+  truthy (`ANTHROPIC_API_KEY` is read by the SDK), else `undefined`. `cli.ts`
+  passes its result straight to `new Tracker(repo, { ai })`.
+
+**No hard dependency.** `@anthropic-ai/sdk` is an **optional** dependency,
+imported lazily (via a non-literal specifier so `tsc` doesn't require it) the
+first time the extractor actually runs. The default build/CLI never load it, and
+`npm run typecheck`/`build`/`test` pass whether or not it's installed. If it's
+missing at runtime when needed, the extractor throws a clear "install
+@anthropic-ai/sdk" error.
+
+**Testing.** Never hit a real model or network. `createClaudeExtractor` takes an
+injectable `complete(prompt) => Promise<string>` seam; tests pass a fake, and the
+pure helpers (`cleanHtml`, `buildExtractionPrompt`, `parseModelJson`) are unit
+tested directly.
 
 ## Development workflow
 

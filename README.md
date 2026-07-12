@@ -66,15 +66,40 @@ Add `--json` for machine-readable output, or `--no-color` to disable ANSI.
 | `PRICE_TRACKER_DB` | SQLite path (default `~/.price-tracker/data.db`) |
 | `PRICE_TRACKER_AFFILIATE_TAG` | Affiliate/partner id used by `share` |
 | `PRICE_TRACKER_AFFILIATE_TEMPLATE` | Optional link template: `{url}` `{tag}` `{domain}` |
+| `PRICE_TRACKER_AI` | Set to `1` to enable the Claude fallback extractor |
+| `PRICE_TRACKER_AI_MODEL` | Model id for the fallback (default `claude-opus-4-8`) |
+| `ANTHROPIC_API_KEY` | API key, used when `PRICE_TRACKER_AI` is on |
 
 ## Price extraction
 
 `refresh` fetches each product URL and extracts a price using a few common
 conventions (Open Graph `og:price:amount` meta tags, schema.org
 `itemprop="price"`, and a currency-symbol fallback) — a dependency-free
-heuristic. An optional AI extractor can be wired in as a fallback via the
-library API (`new Tracker(repo, { ai })`); it is off by default and adds no
-dependency or network calls to the shipped build.
+heuristic that runs first.
+
+### AI fallback (opt-in)
+
+For pages the heuristic can't parse, `price-tracker` can fall back to Claude:
+
+```bash
+export PRICE_TRACKER_AI=1
+export ANTHROPIC_API_KEY=sk-...        # your key
+price-tracker refresh
+```
+
+When enabled, only pages the heuristic fails on are sent to the model (default
+`claude-opus-4-8`), which returns a structured `{price, currency}`. The
+integration uses the official `@anthropic-ai/sdk`, declared as an **optional**
+dependency and imported lazily — the default install and every test run neither
+require it nor make any network calls. Install it explicitly if your environment
+skips optional deps:
+
+```bash
+npm install @anthropic-ai/sdk
+```
+
+You can also wire your own extractor via the library API:
+`new Tracker(repo, { ai })`.
 
 ## Development
 

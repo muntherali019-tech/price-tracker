@@ -10,6 +10,14 @@ export type { AffiliateConfig } from "./affiliate.js";
 export { toJson, toCsv, toMarkdownDigest } from "./export.js";
 export type { ExportFormat, ProductExport } from "./export.js";
 export { seedDemo } from "./demo.js";
+export {
+  createClaudeExtractor,
+  aiExtractorFromEnv,
+  buildExtractionPrompt,
+  parseModelJson,
+  cleanHtml,
+} from "./ai.js";
+export type { ClaudeExtractorOptions } from "./ai.js";
 export * as ui from "./ui.js";
 export type {
   Product,
